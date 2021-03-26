@@ -1,0 +1,215 @@
+function [ts,n_index,i_index,j_index]=Group_SIM(Para,Net,nodelist, xG0,StopCond, Ng,gSt, vListDes,betaM,betaMIndex,deltaM,deltaMIndex,gIdVt)
+
+% Numerical stochastic simulation of GEMF
+% Faryad Darabi Sahneh
+% Kansas State University
+% Last Modified: Sep 2013
+% Copyright (c) 2013, Faryad Darabi Sahneh. All rights reserved.
+% Redistribution and use in source and binary forms, with or without
+% modification, are permitted
+
+
+M=Para{1}; q=Para{2}; L=Para{3}; A_d=Para{4}; A_b=Para{5};
+
+Neigh=Net{1}; I1=Net{2}; I2=Net{3}; N=length(I1);
+
+
+C=length(Ng);
+
+
+
+ 
+
+%%----------------------------
+%X0=zeros(M,N);
+%for i=1:N
+%    X0(x0(i),i)=1;
+%end;
+%X=X0;
+%%in version 2 network state changes to a vector %%%%%%%%changes in v.2
+%X=zeros(1,N);
+X=xG0;
+%-----------------
+% Finding Nq (L by N) matrix
+Nq=zeros(L,N);
+%for n=1:N
+%    for l=1:L
+%        Nln=Neigh{l}(I1(l,n):I2(l,n));
+%       Nq(l,n)=sum(X(q(l),Nln));
+%   end;
+%end;
+%inversion 2 where direction of links and weight of links is considered, Nq
+%is calculated differently.in version 2, Neigh{l}(1,c) where
+%c=I1(l,n):I2(l,n), are the neigbours of node n in layer l that can be
+%affected by it. and Neigh{l}(2,c) are the weight of the links.
+
+a=1;
+for n=1:N
+    for l=1:L
+        if I1(l,n)~=0&&X(q(l),n)>0
+            Nln=Neigh{l}(1,I1(l,n):I2(l,n));
+            wNln=Neigh{l}(2,I1(l,n):I2(l,n));
+            i=1:length(Nln);
+            a=1+a;
+            Nq(l,Nln(i))=Nq(l,Nln(i))+wNln(i)*X(q(l),n);
+            
+        end
+    end
+end
+
+
+%----------------------
+
+%Rin=di*ones(1,N).*X+bil*Nq.*X;
+%Ri=sum(Rin,2);
+%R=sum(Ri);
+%in version 2 we do not need the above rates instesd we define a new rates
+
+Rn=zeros(C,1);
+
+for c=1:C
+    %     if(deltaMIndex(vListDes(c,2)+gIdVt(c)-1,2)~=0)
+    Rn(c)=deltaM(deltaMIndex(vListDes(c,2)+gIdVt(c)-1,2),2);
+    %     end
+    %      if(betaMIndex(vListDes(c,2)+gIdVt(c)-1,2)~=0)
+    Rn(c)=Rn(c)+betaM(betaMIndex(vListDes(c,2)+gIdVt(c)-1,2),2)*Nq(:,c);
+    %     end
+end
+
+% sifu =1;
+% tic
+%      Rn=deltaM(deltaMIndex(vListDes(:,2)+gIdVt'-1,2),2);
+%         Rn=Rn+betaM(betaMIndex(vListDes(:,2)+gIdVt'-1,2),2).*Nq;
+% 
+R=sum(Rn);
+%_____________________________________
+EventNum=StopCond{2};
+RunTime=StopCond{2};
+
+s=0; Tf=0;
+
+ij=1:M;
+while Tf<RunTime %number of events
+    
+    s=s+1;
+    % Event Occurance
+    ts(s)=-log(rand)/R;
+    %_______________________
+    % in version 2 the strategy of drawing is changed
+    %is=rnd_draw(Ri);
+    %ns=rnd_draw(Rin(is,:).*X(is,:)); % only those which are is
+    ns=rnd_draw(Rn);
+    is=gIdVt(ns);
+    % A_d(is,:)
+    % Nq(:,ns)'
+    % squeeze(A_b(is,:,:))
+    % ehnt=0;
+    a=vListDes(ns,2)+gIdVt(ns)-1;
+    
+    Rd=[deltaM(deltaMIndex(a,2):deltaMIndex(a,2)+deltaMIndex(a,1)-1,:);betaM(betaMIndex(a,2):betaMIndex(a,2)+betaMIndex(a,1)-1,:)];
+    if betaMIndex(a,1)+1>0
+        Rd(deltaMIndex(a,1)+1:end,2)=Rd(deltaMIndex(a,1)+1:end,2)*Nq(:,ns);
+        % ehnt=1;
+    end
+    jss=rnd_draw(Rd(:,2));
+    js=Rd(jss,1);
+%     if isempty(js)
+%         sifu=1
+%     end
+    %___________________________________
+    
+    gIdVt(ns)=js;
+    a=vListDes(ns,2)+gIdVt(ns)-1;
+    % Updateing
+    % Update State
+    %____________________in vesion 2 updating the states changed
+    %X(is,ns)=0; X(js,ns)=1;
+    
+    
+    cd=gSt(vListDes(ns,2)+js-1,:)-gSt(vListDes(ns,2)+is-1,:);
+    isc=ij(cd==-1);
+    jsc=ij(cd==1);
+    n_index(s)=ns;
+    j_index(s)=jsc;
+    i_index(s)=isc;
+    % Updating neighbors state counters and Rates
+    % if (isc==2 && (ns==1 || ns==2))
+    %     sifu=1;
+    % end
+    
+    %Ri=Ri-Rin(:,ns);
+    %Rin(:,ns)=di.*X(:,ns)+bil*Nq(:,ns).*X(:,ns);
+    %Ri=Ri+Rin(:,ns);
+    R=R-Rn(ns);
+    % if(ns==1 ||ns==2)
+    %     sifu=1;
+    % end
+    % if(deltaMIndex(vListDes(ns,2)+gIdVt(ns)-1,2)~=0)
+    Rn(ns)=sum(deltaM(deltaMIndex(a,2):deltaMIndex(a,2)+deltaMIndex(a,1)-1,2));
+    % end
+    % if(betaMIndex(vListDes(ns,2)+gIdVt(ns)-1,2)~=0)
+    Rn(ns)=Rn(ns)+sum(betaM(betaMIndex(a,2):betaMIndex(a,2)+betaMIndex(a,1)-1,2)*Nq(:,ns));
+    % end
+    % Rn(ns)=di(js)+bil(js,:)*Nq(:,ns);
+    R=R+Rn(ns);
+    
+    %for l=find(q==js)
+    %    Nln=Neigh{l}(I1(l,ns):I2(l,ns));
+    %    for n=Nln
+    %        Nq(l,n)=Nq(l,n)+1;
+    %        Rin(:,n)=Rin(:,n)+bil(:,l).*X(:,n);
+    %    end;
+    %    Ri=Ri+bil(:,l).*sum(X(:,Nln),2);
+    %end;
+    
+    %for l=find(q==is)
+    %    Nln=Neigh{l}(I1(l,ns):I2(l,ns));
+    %    for n=Nln
+    %        Nq(l,n)=Nq(l,n)-1;
+    %        Rin(:,n)=Rin(:,n)-bil(:,l).*X(:,n);
+    %    end;
+    %    Ri=Ri-bil(:,l).*sum(X(:,Nln),2);
+    %end;
+    %     cd=gSt(vListDes(ns,2)+js-1,:)-gSt(vListDes(ns,2)+is-1,:);
+    %     isc=find(cd==-1);
+    %     jsc=find(cd==1);
+    for l=find(q==jsc)
+        if I1(l,ns)~=0
+            Nln=Neigh{l}(1,I1(l,ns):I2(l,ns));
+            wNln=Neigh{l}(2,I1(l,ns):I2(l,ns));
+            
+            for i=1:length(Nln)
+            Nq(l,Nln(i))=Nq(l,Nln(i))+wNln(i);
+            a=betaM(betaMIndex(vListDes(Nln(i),2)+gIdVt(Nln(i))'-1,2),2).*wNln(i)';
+            Rn(Nln(i))=Rn(Nln(i))+a;
+            %        Rn(Nln(i))=Rn(Nln(i))+bil(X(Nln(i)),l)*wNln(i);
+            R=R+a;
+            end
+            
+        end
+    end
+    
+    for l=find(q==isc)
+        if I1(l,ns)~=0
+            Nln=Neigh{l}(1,I1(l,ns):I2(l,ns));
+            wNln=Neigh{l}(2,I1(l,ns):I2(l,ns));
+            
+            for i=1:length(Nln)
+            Nq(l,Nln(i))=max(0,Nq(l,Nln(i))-wNln(i));
+            a=betaM(betaMIndex(vListDes(Nln(i),2)+gIdVt(Nln(i))'-1,2),2).*wNln(i)';
+            Rn(Nln(i))=max(0,Rn(Nln(i))-a);
+            R=R-a;
+            end
+            
+        end
+    end
+    %R=sum(Ri);
+    
+    if R<1e-6
+        break;
+    end
+    
+    Tf=Tf+ts(s);
+   
+    
+end
